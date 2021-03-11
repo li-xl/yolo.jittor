@@ -295,7 +295,7 @@ def train(hyp, opt, tb_writer=None):
     # Test best.pkl
     logger.info('%g epochs completed in %.3f hours.\n' % (epoch - start_epoch + 1, (time.time() - t0) / 3600))
     best_model = Model(opt.cfg)
-    best_model.load(final)
+    best_model.load(str(final))
     best_model = best_model.fuse()
     if opt.data.endswith('coco.yaml') and nc == 80:  # if COCO
         for conf, iou, save_json in ([0.25, 0.45, False], [0.001, 0.65, True]):  # speed, mAP tests
