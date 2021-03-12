@@ -12,6 +12,8 @@ from utils.general import check_img_size, non_max_suppression, scale_coords, \
     xyxy2xywh, set_logging, increment_path
 from utils.plots import plot_one_box
 from utils.model_utils import time_synchronized
+import models.common as common
+
 
 
 def detect(save_img=False):
@@ -30,14 +32,6 @@ def detect(save_img=False):
     # Load model
     model = Model(opt.cfg)
     model.load(weights)
-
-    # def save(model,path):
-    #     params = model.parameters()
-    #     state_dict = {}
-    #     for p in params:
-    #         state_dict[p.name()]=p.data 
-    #     jt.save(state_dict,path)
-    # save(model,weights.replace("pth","pkl"))
     model = model.fuse()
     model.eval()
 
@@ -134,7 +128,8 @@ def detect(save_img=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='models/yolov3.yaml', help='source')  
+    parser.add_argument('--use_v3', action="store_true", help='use yolov3 or not')  
+    parser.add_argument('--cfg', type=str, default='configs/yolov3.yaml', help='source')  
     parser.add_argument('--weights', nargs='+', type=str, default='weights/yolov3.pkl', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='data/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
@@ -152,6 +147,8 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     opt = parser.parse_args()
+    assert (opt.use_v3 == ("yolov3" in opt.cfg)),"You must use --use_v3 when you use yolov3 config"
+    common.Conv.use_v3 = opt.use_v3
     print(opt)
 
     with jt.no_grad():

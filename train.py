@@ -26,8 +26,7 @@ from utils.general import labels_to_class_weights, increment_path, labels_to_ima
 from utils.loss import compute_loss
 from utils.plots import plot_images, plot_labels, plot_results, plot_evolution,plot_lr_scheduler
 from utils.model_utils import ModelEMA
-
-from jittor_utils import auto_diff
+import models.common as common
 
 logger = logging.getLogger(__name__)
 
@@ -277,9 +276,9 @@ def train(hyp, opt, tb_writer=None):
         save = (not opt.nosave) or (final_epoch and not opt.evolve)
         if save:
             # Save last, best and delete
-            jt.save(ema.ema.parameters(), last)
+            jt.save(ema.ema.state_dict(), last)
             if best_fitness == fi:
-                jt.save(ema.ema.parameters(), best)
+                jt.save(ema.ema.state_dict(), best)
         # end epoch ----------------------------------------------------------------------------------------------------
     # end training
     # Strip optimizers
@@ -316,8 +315,9 @@ def train(hyp, opt, tb_writer=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--use_v3', action="store_true", help='use yolov3 or not')  
     parser.add_argument('--weights', type=str, default='', help='initial weights path')
-    parser.add_argument('--cfg', type=str, default='models/yolov3.yaml', help='model.yaml path')
+    parser.add_argument('--cfg', type=str, default='configs/yolov5s.yaml', help='model.yaml path')
     parser.add_argument('--data', type=str, default='data/coco128.yaml', help='data.yaml path')
     parser.add_argument('--hyp', type=str, default='data/hyp.scratch.yaml', help='hyperparameters path')
     parser.add_argument('--epochs', type=int, default=300)
@@ -343,6 +343,8 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
     opt = parser.parse_args()
+    assert (opt.use_v3 == ("yolov3" in opt.cfg)),"You must use --use_v3 when you use yolov3 config"
+    common.Conv.use_v3 = opt.use_v3
     set_logging()
 
     # opt.hyp = opt.hyp or ('hyp.finetune.yaml' if opt.weights else 'hyp.scratch.yaml')

@@ -17,7 +17,7 @@ from utils.metrics import ap_per_class, ConfusionMatrix
 from utils.plots import plot_images, output_to_target, plot_study_txt
 from utils.model_utils import time_synchronized
 from models.yolo import Model
-
+import models.common as common
 
 def test(cfg = None,
          data = None,
@@ -101,7 +101,7 @@ def test(cfg = None,
             t = time_synchronized()
             output = non_max_suppression(inf_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb)
             t1 += time_synchronized() - t
-
+        
         # Statistics per image
         for si, pred in enumerate(output):
             labels = targets[targets[:, 0] == si, 1:]
@@ -150,7 +150,7 @@ def test(cfg = None,
                 tbox = xywh2xyxy(labels[:, 1:5])
                 tbox = scale_coords(img[si].shape[1:], tbox, shapes[si][0], shapes[si][1])  # native-space labels
                 if plots:
-                    confusion_matrix.process_batch(pred, jt.contrib.concat((labels[:, 0:1], tbox), 1))
+                    confusion_matrix.process_batch(predn, jt.contrib.concat((labels[:, 0:1], tbox), 1))
 
                 # Per target class
                 for cls in jt.unique(tcls_tensor):
@@ -175,7 +175,7 @@ def test(cfg = None,
 
             # Append statistics (correct, conf, pcls, tcls)
             stats.append((correct.numpy(), pred[:, 4].numpy(), pred[:, 5].numpy(), tcls))
-
+        
         # Plot images
         if plots and batch_i < 3:
             f = save_dir / f'test_batch{batch_i}_labels.jpg'  # labels
@@ -187,7 +187,7 @@ def test(cfg = None,
     stats = [np.concatenate(x, 0) for x in zip(*stats)]  # to numpy
     if len(stats) and stats[0].any():
         p, r, ap, f1, ap_class = ap_per_class(*stats, plot=plots, save_dir=save_dir, names=names)
-        p, r, ap50, ap = p[:, 0], r[:, 0], ap[:, 0], ap.mean(1)  # [P, R, AP@0.5, AP@0.5:0.95]
+        ap50, ap = ap[:, 0], ap.mean(1)  # AP@0.5, AP@0.5:0.95
         mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
         nt = np.bincount(stats[3].astype(np.int64), minlength=nc)  # number of targets per class
     else:
@@ -249,8 +249,9 @@ def test(cfg = None,
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
-    parser.add_argument('--cfg', type=str, default='models/yolov3-spp.yaml', help='source')  
-    parser.add_argument('--weights', nargs='+', type=str, default='weights/yolov3-spp.pkl', help='model.pt path(s)')
+    parser.add_argument('--use_v3', action="store_true", help='use yolov3 or not')  
+    parser.add_argument('--cfg', type=str, default='configs/yolov5x.yaml', help='source')  
+    parser.add_argument('--weights', nargs='+', type=str, default='weights/yolov5x.pkl', help='model.pt path(s)')
     parser.add_argument('--data', type=str, default='data/coco128.yaml', help='*.data path')
     parser.add_argument('--batch-size', type=int, default=32, help='size of each image batch')
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
@@ -269,6 +270,8 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     opt = parser.parse_args()
+    assert (opt.use_v3 == ("yolov3" in opt.cfg)),"You must use --use_v3 when you use yolov3 config"
+    common.Conv.use_v3 = opt.use_v3
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.data = check_file(opt.data)  # check file
     if not opt.no_cuda:

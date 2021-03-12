@@ -21,7 +21,7 @@ from PIL import Image, ExifTags
 from jittor.dataset import Dataset
 from tqdm import tqdm
 
-from utils.general import xyxy2xywh, xywh2xyxy, clean_str
+from utils.general import xyxy2xywh, xywh2xyxy, xywhn2xyxy, xyn2xy, segment2box, segments2boxes, resample_segments,clean_str
 
 # Parameters
 help_url = 'https://github.com/ultralytics/yolov3/wiki/Train-Custom-Data'
@@ -94,7 +94,7 @@ class _RepeatSampler(object):
 
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=640):
+    def __init__(self, path, img_size=640, stride=32):
         p = str(Path(path))  # os-agnostic
         p = os.path.abspath(p)  # absolute path
         if '*' in p:
@@ -111,6 +111,7 @@ class LoadImages:  # for inference
         ni, nv = len(images), len(videos)
 
         self.img_size = img_size
+        self.stride = stride
         self.files = images + videos
         self.nf = ni + nv  # number of files
         self.video_flag = [False] * ni + [True] * nv

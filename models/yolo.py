@@ -8,7 +8,7 @@ sys.path.append('./')  # to run '$ python *.py' files in subdirectories
 logger = logging.getLogger(__name__)
 
 from models.common import *
-from models.experimental import MixConv2d, CrossConv
+from models.experimental import *
 from utils.autoanchor import check_anchor_order
 from utils.general import make_divisible, check_file, set_logging
 from utils.model_utils import time_synchronized, fuse_conv_and_bn, scale_img, initialize_weights, copy_attr
@@ -54,7 +54,7 @@ class Detect(nn.Module):
 
 
 class Model(nn.Module):
-    def __init__(self, cfg='yolov3.yaml', ch=3, nc=None):  # model, input channels, number of classes
+    def __init__(self, cfg='yolov3.yaml', ch=3, nc=None,anchors=None):  # model, input channels, number of classes
         super(Model, self).__init__()
         if isinstance(cfg, dict):
             self.yaml = cfg  # model dict
@@ -62,13 +62,17 @@ class Model(nn.Module):
             import yaml  # for torch hub
             self.yaml_file = Path(cfg).name
             with open(cfg) as f:
-                self.yaml = yaml.load(f, Loader=yaml.FullLoader)  # model dict
+                self.yaml = yaml.load(f, Loader=yaml.SafeLoader)  # model dict
 
         # Define model
         ch = self.yaml['ch'] = self.yaml.get('ch', ch)  # input channels
         if nc and nc != self.yaml['nc']:
             logger.info('Overriding model.yaml nc=%g with nc=%g' % (self.yaml['nc'], nc))
             self.yaml['nc'] = nc  # override yaml value
+        if anchors:
+            logger.info(f'Overriding model.yaml anchors with anchors={anchors}')
+            self.yaml['anchors'] = round(anchors)  # override yaml value
+
         self.model, self.save = parse_model(deepcopy(self.yaml), ch=[ch])  # model, savelist
         if "names" in self.yaml and len(self.yaml["names"])==self.yaml["nc"]:
             self.names = self.yaml["names"]
@@ -190,7 +194,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
                 pass
 
         n = max(round(n * gd), 1) if n > 1 else n  # depth gain
-        if m in [Conv, Bottleneck, SPP, DWConv, MixConv2d, Focus, CrossConv, BottleneckCSP, C3]:
+        if m in [Conv, GhostConv,Bottleneck, GhostBottleneck,SPP, DWConv, MixConv2d, Focus, CrossConv, BottleneckCSP, C3]:
             c1, c2 = ch[f], args[0]
 
             # Normal
@@ -213,22 +217,22 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
 
             args = [c1, c2, *args[1:]]
             if m in [BottleneckCSP, C3]:
-                args.insert(2, n)
+                args.insert(2, n)  # number of repeats
                 n = 1
         elif m is nn.BatchNorm:
             args = [ch[f]]
         elif m is Concat:
-            c2 = sum([ch[x if x < 0 else x + 1] for x in f])
+            c2 = sum([ch[x] for x in f])
         elif m is Detect:
-            args.append([ch[x + 1] for x in f])
+            args.append([ch[x] for x in f])
             if isinstance(args[1], int):  # number of anchors
                 args[1] = [list(range(args[1] * 2))] * len(f)
         elif m is Contract:
-            c2 = ch[f if f < 0 else f + 1] * args[0] ** 2
+            c2 = ch[f] * args[0] ** 2
         elif m is Expand:
-            c2 = ch[f if f < 0 else f + 1] // args[0] ** 2
+            c2 = ch[f] // args[0] ** 2
         else:
-            c2 = ch[f if f < 0 else f + 1]
+            c2 = ch[f]
         
         m_ = nn.Sequential(*[m(*args) for _ in range(n)]) if n > 1 else m(*args)  # module
         t = str(m)[8:-2].replace('__main__.', '')  # module type
@@ -237,6 +241,8 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
         logger.info('%3s%18s%3s%10.0f  %-40s%-30s' % (i, f, n, np, t, args))  # print
         save.extend(x % i for x in ([f] if isinstance(f, int) else f) if x != -1)  # append to savelist
         layers.append(m_)
+        if i == 0:
+            ch = []
         ch.append(c2)
     return nn.Sequential(*layers), sorted(save)
 

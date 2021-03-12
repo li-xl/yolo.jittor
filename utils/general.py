@@ -241,6 +241,50 @@ def xywh2xyxy(x):
     return y
 
 
+def xywhn2xyxy(x, w=640, h=640, padw=0, padh=0):
+    # Convert nx4 boxes from [x, y, w, h] normalized to [x1, y1, x2, y2] where xy1=top-left, xy2=bottom-right
+    y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
+    y[:, 0] = w * (x[:, 0] - x[:, 2] / 2) + padw  # top left x
+    y[:, 1] = h * (x[:, 1] - x[:, 3] / 2) + padh  # top left y
+    y[:, 2] = w * (x[:, 0] + x[:, 2] / 2) + padw  # bottom right x
+    y[:, 3] = h * (x[:, 1] + x[:, 3] / 2) + padh  # bottom right y
+    return y
+
+
+def xyn2xy(x, w=640, h=640, padw=0, padh=0):
+    # Convert normalized segments into pixel segments, shape (n,2)
+    y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
+    y[:, 0] = w * x[:, 0] + padw  # top left x
+    y[:, 1] = h * x[:, 1] + padh  # top left y
+    return y
+
+
+def segment2box(segment, width=640, height=640):
+    # Convert 1 segment label to 1 box label, applying inside-image constraint, i.e. (xy1, xy2, ...) to (xyxy)
+    x, y = segment.T  # segment xy
+    inside = (x >= 0) & (y >= 0) & (x <= width) & (y <= height)
+    x, y, = x[inside], y[inside]
+    return np.array([x.min(), y.min(), x.max(), y.max()]) if any(x) else np.zeros((1, 4))  # cls, xyxy
+
+
+def segments2boxes(segments):
+    # Convert segment labels to box labels, i.e. (cls, xy1, xy2, ...) to (cls, xywh)
+    boxes = []
+    for s in segments:
+        x, y = s.T  # segment xy
+        boxes.append([x.min(), y.min(), x.max(), y.max()])  # cls, xyxy
+    return xyxy2xywh(np.array(boxes))  # cls, xywh
+
+
+def resample_segments(segments, n=1000):
+    # Up-sample an (n,2) segment
+    for i, s in enumerate(segments):
+        x = np.linspace(0, len(s) - 1, n)
+        xp = np.arange(len(s))
+        segments[i] = np.concatenate([np.interp(x, xp, s[:, i]) for i in range(2)]).reshape(2, -1).T  # segment xy
+    return segments
+
+
 def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
     # Rescale coords (xyxy) from img1_shape to img0_shape
     if ratio_pad is None:  # calculate from img0_shape
@@ -266,7 +310,7 @@ def clip_coords(boxes, img_shape):
 
     return boxes
 
-def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-9):
+def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
     # Returns the IoU of box1 to box2. box1 is 4, box2 is nx4
     box2 = box2.transpose(1,0)
 
@@ -302,7 +346,7 @@ def bbox_iou(box1, box2, x1y1x2y2=True, GIoU=False, DIoU=False, CIoU=False, eps=
             elif CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
                 v = (4 / math.pi ** 2) * jt.pow(jt.atan(w2 / h2) - jt.atan(w1 / h1), 2)
                 with jt.no_grad():
-                    alpha = v / ((1 + eps) - iou + v)
+                    alpha = v / (v - iou + (1 + eps))
                 return iou - (rho2 / c2 + v * alpha)  # CIoU
         else:  # GIoU https://arxiv.org/pdf/1902.09630.pdf
             c_area = cw * ch + eps  # convex area
@@ -344,7 +388,7 @@ def wh_iou(wh1, wh2):
     return inter / (wh1.prod(2) + wh2.prod(2) - inter)  # iou = inter / (area1 + area2 - inter)
 
 
-def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False, labels=()):
+def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=None, agnostic=False,  multi_label=True,labels=()):
     """Performs Non-Maximum Suppression (NMS) on inference results
 
     Returns:
@@ -360,7 +404,7 @@ def non_max_suppression(prediction, conf_thres=0.25, iou_thres=0.45, classes=Non
     max_nms = 30000  # maximum number of boxes into nms()
     time_limit = 10.0  # seconds to quit after
     redundant = True  # require redundant detections
-    multi_label = nc > 1  # multiple labels per box (adds 0.5ms/img)
+    multi_label &= nc > 1  # multiple labels per box (adds 0.5ms/img)
     merge = False  # use merge-NMS
 
     t = time.time()

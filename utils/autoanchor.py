@@ -81,12 +81,12 @@ def kmean_anchors(path='./data/coco128.yaml', n=9, img_size=640, thr=4.0, gen=10
 
     def metric(k, wh):  # compute metrics
         r = wh[:, None] / k[None]
-        x = torch.min(r, 1. / r).min(2)  # ratio metric
+        x = jt.minimum(r, 1. / r).min(2)  # ratio metric
         # x = wh_iou(wh, torch.tensor(k))  # iou metric
         return x, x.max(1)  # x, best_x
 
     def anchor_fitness(k):  # mutation fitness
-        _, best = metric(torch.tensor(k, dtype=torch.float32), wh)
+        _, best = metric(jt.array(k, dtype="float32"), wh)
         return (best * (best > thr).float()).mean()  # fitness
 
     def print_results(k):
@@ -102,7 +102,7 @@ def kmean_anchors(path='./data/coco128.yaml', n=9, img_size=640, thr=4.0, gen=10
 
     if isinstance(path, str):  # *.yaml file
         with open(path) as f:
-            data_dict = yaml.load(f, Loader=yaml.FullLoader)  # model dict
+            data_dict = yaml.load(f, Loader=yaml.SafeLoader)  # model dict
         from utils.datasets import LoadImagesAndLabels
         dataset = LoadImagesAndLabels(data_dict['train'], augment=True, rect=True)
     else:
@@ -124,8 +124,8 @@ def kmean_anchors(path='./data/coco128.yaml', n=9, img_size=640, thr=4.0, gen=10
     s = wh.std(0)  # sigmas for whitening
     k, dist = kmeans(wh / s, n, iter=30)  # points, mean distance
     k *= s
-    wh = torch.tensor(wh, dtype=torch.float32)  # filtered
-    wh0 = torch.tensor(wh0, dtype=torch.float32)  # unfiltered
+    wh = jt.array(wh, dtype="float32")  # filtered
+    wh0 = jt.array(wh0, dtype="float32")  # unfiltered
     k = print_results(k)
 
     # Plot
