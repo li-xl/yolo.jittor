@@ -1,5 +1,5 @@
 # YOLO
-This repo is based on [Jittor](https://github.com/Jittor/jittor). It's converted from yolov3 and yolov5.
+This repo is based on [Jittor](https://github.com/Jittor/jittor). It supports yolov3 and yolov5.
 
 ## Test Results
 **Pytorch(coco128)**
