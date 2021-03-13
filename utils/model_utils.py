@@ -88,8 +88,6 @@ class ModelEMA:
         # Create EMA
         self.ema = deepcopy(model)
         self.ema.eval()  # FP32 EMA
-        # if next(model.parameters()).device.type != 'cpu':
-        #     self.ema.half()  # FP16 EMA
         self.updates = updates  # number of EMA updates
         self.decay = lambda x: decay * (1 - math.exp(-x / 2000))  # decay exponential ramp (to help early epochs)
         for p in self.ema.parameters():
@@ -106,6 +104,7 @@ class ModelEMA:
                 if v.dtype == "float32":
                     v *= d
                     v += (1. - d) * msd[k].detach()
+            jt.sync_all()
 
     def update_attr(self, model, include=(), exclude=('process_group', 'reducer')):
         # Update EMA attributes
