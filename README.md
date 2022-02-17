@@ -1,6 +1,8 @@
 # YOLO
 This repo is based on [Jittor](https://github.com/Jittor/jittor). It supports yolov3 and yolov5.
 
+COCO128 datasets: https://cloud.tsinghua.edu.cn/f/7efbb154e31449d78e2b/
+
 ## Test Results
 **Pytorch(coco128)**
 |Model|Class|Images|Targets|P|R|mAP@.5|mAP@.5:.95|
